@@ -199,7 +199,7 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> Re
 /// Show a GNOME-like AboutDialog using the system icon from /usr/share/icons/hicolor
 fn show_about(parent: &impl IsA<Window>) {
     use gtk::AboutDialog;
-    use gdk_pixbuf::Pixbuf;
+    use gtk::gdk_pixbuf::Pixbuf;
 
     // Get version from Cargo.toml
     const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -213,7 +213,7 @@ fn show_about(parent: &impl IsA<Window>) {
 
     // Program metadata
     let program_name = "BackupToUSB";
-    let authors = &["Kuznix <kuznix2011@example.com>"];
+    let authors = vec!["Kuznix <kuznix2011@example.com>".to_string()];
     let website = "https://github.com/Kuznix/backuptousb";
 
     // Features (user requested "add mamy features" — include a concise feature list)
@@ -259,7 +259,7 @@ fn show_about(parent: &impl IsA<Window>) {
     } else {
         // Try a common icon name; this requires an icon named "backuptousb" to be installed in the theme,
         // otherwise fall back to a generic system icon.
-        if gtk::IconTheme::default().and_then(|t| t.has_icon("backuptousb")).unwrap_or(false) {
+        if gtk::IconTheme::default().map(|t| t.has_icon("backuptousb")).unwrap_or(false) {
             about.set_logo_icon_name(Some("backuptousb"));
         } else {
             about.set_logo_icon_name(Some("applications-system"));
