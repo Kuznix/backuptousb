@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BackupToUSB
+Comment=Backup your home directory to USB or any folder
+Exec=BackupToUSB
+Icon=backuptousb
+Terminal=false
+Categories=Utility;System;
+StartupNotify=true
