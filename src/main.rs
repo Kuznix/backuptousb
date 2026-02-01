@@ -16,7 +16,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() {
     let app = Application::builder()
-        .application_id("com.Kuznix.BackupToUSB")
+        // updated to the requested application id
+        .application_id("com.kuznix.backuptousb")
         .build();
 
     app.connect_activate(|app| {
@@ -195,9 +196,10 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> Re
     Ok(())
 }
 
-/// Show about dialog with logo, version, and dynamic year
+/// Show a GNOME-like AboutDialog using the system icon from /usr/share/icons/hicolor
 fn show_about(parent: &impl IsA<Window>) {
-    use gtk::{Dialog, Image, Box as GtkBox, Orientation};
+    use gtk::AboutDialog;
+    use gdk_pixbuf::Pixbuf;
 
     // Get version from Cargo.toml
     const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -205,48 +207,68 @@ fn show_about(parent: &impl IsA<Window>) {
     // Determine year display starting from 2026
     let year_text = if COMPILE_YEAR == 2026 {
         "2026".to_string()
-    } else if COMPILE_YEAR == 2027 {
-        "2026-2027".to_string()
     } else {
         format!("2026-{}", COMPILE_YEAR)
     };
 
-    // Create a dialog
-    let dialog = Dialog::builder()
-        .title("About BackupToUSB")
+    // Program metadata
+    let program_name = "BackupToUSB";
+    let authors = &["Kuznix <kuznix2011@example.com>"];
+    let website = "https://github.com/Kuznix/backuptousb";
+
+    // Features (user requested "add mamy features" — include a concise feature list)
+    let features = [
+        "Incremental home backup",
+        "Copy SSH keys (~/.ssh)",
+        "Optionally delete files >1GB",
+        "Append log to target (optional)",
+        "Simple GNOME-style GUI",
+        "Safe directory creation and copying",
+        "Portable target support (USB/External drives)",
+        "Extensible: more options planned",
+    ];
+    let comments = format!("Features:\n- {}", features.join("\n- "));
+
+    // Build AboutDialog
+    let about = AboutDialog::builder()
         .transient_for(parent)
-        .modal(true)
+        .program_name(program_name)
+        .version(VERSION)
+        .comments(&comments)
+        .authors(authors)
+        .website(website)
         .build();
 
-    dialog.add_buttons(&[("OK", gtk::ResponseType::Ok)]);
+    // Try to load icon from /usr/share/icons/hicolor/<size>/apps/backuptousb.png
+    let hicolor_sizes = ["128x128", "64x64", "48x48", "32x32"];
+    let mut loaded_pixbuf: Option<Pixbuf> = None;
 
-    // Vertical box for image + text
-    let vbox = GtkBox::new(Orientation::Vertical, 10);
-    vbox.set_margin_start(10);
-    vbox.set_margin_end(10);
-    vbox.set_margin_top(10);
-    vbox.set_margin_bottom(10);
+    for size in &hicolor_sizes {
+        let path = format!("/usr/share/icons/hicolor/{}/apps/backuptousb.png", size);
+        if std::path::Path::new(&path).exists() {
+            if let Ok(pixbuf) = Pixbuf::from_file(&path) {
+                loaded_pixbuf = Some(pixbuf);
+                break;
+            }
+        }
+    }
 
-    // Load logo image
-    let logo_path = "extra/logo/backuptousb.png";
-    let image = Image::from_file(logo_path);
+    // If we found a pixbuf, set it; otherwise try to set an icon name so the theme can provide it
+    if let Some(pixbuf) = loaded_pixbuf {
+        about.set_logo(Some(&pixbuf));
+    } else {
+        // Try a common icon name; this requires an icon named "backuptousb" to be installed in the theme,
+        // otherwise fall back to a generic system icon.
+        if gtk::IconTheme::default().and_then(|t| t.has_icon("backuptousb")).unwrap_or(false) {
+            about.set_logo_icon_name(Some("backuptousb"));
+        } else {
+            about.set_logo_icon_name(Some("applications-system"));
+        }
+    }
 
-    // Text label with version + year
-    let text = Label::new(Some(&format!("BackupToUSB {} - {}", VERSION, year_text)));
-    text.set_justify(gtk::Justification::Center);
+    // Set copyright and small copyright string
+    about.set_copyright(Some(&format!("© {} Kuznix", year_text)));
 
-    // Pack image and text into vbox
-    vbox.append(&image);
-    vbox.append(&text);
-
-    // Add vbox to dialog content
-    dialog.content_area().append(&vbox);
-
-    // Close dialog on response
-    dialog.connect_response(|dialog, _| {
-        dialog.close();
-    });
-
-    // Show the dialog
-    dialog.present();
+    // Present the about dialog
+    about.present();
 }
