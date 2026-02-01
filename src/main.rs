@@ -199,7 +199,8 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> Re
 /// Show a GNOME-like AboutDialog using the system icon from /usr/share/icons/hicolor
 fn show_about(parent: &impl IsA<Window>) {
     use gtk::AboutDialog;
-    use gtk::gdk_pixbuf::Pixbuf;
+    use gio::File;
+    use gdk4::Texture;
 
     // Get version from Cargo.toml
     const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -239,27 +240,30 @@ fn show_about(parent: &impl IsA<Window>) {
         .website(website)
         .build();
 
-    // Try to load icon from /usr/share/icons/hicolor/<size>/apps/backuptousb.png
+    // Try to load icon from /usr/share/icons/hicolor/<size>/apps/backuptousb.png as a gdk4::Texture (Paintable).
+    // AboutDialog::set_logo expects a gdk4::Paintable; gdk_pixbuf::Pixbuf does not implement that trait.
     let hicolor_sizes = ["128x128", "64x64", "48x48", "32x32"];
-    let mut loaded_pixbuf: Option<Pixbuf> = None;
+    let mut loaded_texture: Option<Texture> = None;
 
     for size in &hicolor_sizes {
         let path = format!("/usr/share/icons/hicolor/{}/apps/backuptousb.png", size);
         if std::path::Path::new(&path).exists() {
-            if let Ok(pixbuf) = Pixbuf::from_file(&path) {
-                loaded_pixbuf = Some(pixbuf);
+            // gio::File::for_path does not return Result; it's infallible.
+            let gfile = File::for_path(&path);
+            if let Ok(texture) = Texture::from_file(&gfile) {
+                loaded_texture = Some(texture);
                 break;
             }
         }
     }
 
-    // If we found a pixbuf, set it; otherwise try to set an icon name so the theme can provide it
-    if let Some(pixbuf) = loaded_pixbuf {
-        about.set_logo(Some(&pixbuf));
+    // If we found a texture, set it; otherwise try to set an icon name so the theme can provide it
+    if let Some(ref texture) = loaded_texture {
+        about.set_logo(Some(texture));
     } else {
-        // Try a common icon name; this requires an icon named "backuptousb" to be installed in the theme,
-        // otherwise fall back to a generic system icon.
-        if gtk::IconTheme::default().map(|t| t.has_icon("backuptousb")).unwrap_or(false) {
+        // Use IconTheme directly; IconTheme::default() returns an IconTheme (not Option).
+        let icon_theme = gtk::IconTheme::default();
+        if icon_theme.has_icon("backuptousb") {
             about.set_logo_icon_name(Some("backuptousb"));
         } else {
             about.set_logo_icon_name(Some("applications-system"));
