@@ -6,6 +6,7 @@ build = "build.rs"
 
 [dependencies]
 gtk = { version = "0.10.3", package = "gtk4" }
+gdk = "0.10.3"
 gio = "0.21.5"
 dirs = "6.0.0"
 fs_extra = "1.3"
