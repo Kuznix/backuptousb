@@ -1,5 +1,5 @@
 [package]
-name = "BackupToUSB"
+name = "backuptousb"
 version = "0.1.0-alpha"
 edition = "2024"
 build = "build.rs"
