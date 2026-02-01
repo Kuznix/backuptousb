@@ -1,5 +1,6 @@
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Button, CheckButton, FileChooserButton, Orientation, Box as GtkBox, Label};
+use gtk::{Application, ApplicationWindow, Button, CheckButton, Orientation, Box as GtkBox, Label, Window};
+use gtk::{FileChooserAction, FileChooserNative};
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::Write;
@@ -7,6 +8,9 @@ use dirs;
 
 // Include compile-time year from build.rs
 include!(concat!(env!("OUT_DIR"), "/compile_year.rs"));
+
+// Type alias for error handling with fs_extra
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() {
     let app = Application::builder()
@@ -19,18 +23,20 @@ fn main() {
             .application(app)
             .title("BackupToUSB")
             .default_width(500)
-            .default_height(250)
+            .default_height(300)
             .build();
 
         // Vertical container
         let vbox = GtkBox::new(Orientation::Vertical, 10);
-        vbox.set_margin_all(10);
+        vbox.set_margin_start(10);
+        vbox.set_margin_end(10);
+        vbox.set_margin_top(10);
+        vbox.set_margin_bottom(10);
 
-        // Target folder chooser
-        let folder_label = Label::new(Some("Select target folder:"));
-        let folder_chooser = FileChooserButton::builder()
+        // Folder chooser using FileChooserNative
+        let folder_chooser = FileChooserNative::builder()
             .title("Choose Target Folder")
-            .action(gtk::FileChooserAction::SelectFolder)
+            .action(FileChooserAction::SelectFolder)
             .build();
 
         // Checkboxes
@@ -43,7 +49,6 @@ fn main() {
         let about_button = Button::with_label("About");
 
         // Pack widgets
-        vbox.append(&folder_label);
         vbox.append(&folder_chooser);
         vbox.append(&ssh_checkbox);
         vbox.append(&delete_checkbox);
@@ -64,6 +69,7 @@ fn main() {
                 let copy_ssh = ssh_checkbox_clone.is_active();
                 let delete_large = delete_checkbox_clone.is_active();
                 let log = log_checkbox_clone.is_active();
+
                 match copy_home(&target_path, copy_ssh, delete_large, log) {
                     Ok(_) => println!("Backup completed!"),
                     Err(e) => eprintln!("Backup failed: {}", e),
@@ -74,8 +80,9 @@ fn main() {
         });
 
         // About button clicked
+        let window_clone = window.clone();
         about_button.connect_clicked(move |_| {
-            show_about(&window);
+            show_about(&window_clone);
         });
 
         window.show();
@@ -85,8 +92,8 @@ fn main() {
 }
 
 /// Copy home folder with options
-fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> std::io::Result<()> {
-    let home = dirs::home_dir().expect("Cannot find home directory");
+fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> Result<()> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
 
     // Ensure target exists
     if !target.exists() {
@@ -99,7 +106,8 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> st
         let ssh_dst = target.join(".ssh");
         if ssh_src.exists() {
             fs::create_dir_all(&ssh_dst)?;
-            fs_extra::dir::copy(&ssh_src, &ssh_dst, &fs_extra::dir::CopyOptions::new())?;
+            fs_extra::dir::copy(&ssh_src, &ssh_dst, &fs_extra::dir::CopyOptions::new())
+                .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
         }
     }
 
@@ -120,7 +128,7 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> st
         let file_name = entry.file_name();
 
         // Skip .ssh if already copied
-        if path.file_name().unwrap() == ".ssh" {
+        if file_name == ".ssh" {
             continue;
         }
 
@@ -128,7 +136,8 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> st
 
         if path.is_dir() {
             fs::create_dir_all(&target_path)?;
-            fs_extra::dir::copy(&path, &target_path, &fs_extra::dir::CopyOptions::new())?;
+            fs_extra::dir::copy(&path, &target_path, &fs_extra::dir::CopyOptions::new())
+                .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
         } else {
             // Delete large files if option enabled
             if delete_large && fs::metadata(&path)?.len() > 1_000_000_000 {
@@ -150,7 +159,7 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> st
 }
 
 /// Show about dialog with logo, version, and dynamic year
-fn show_about(parent: &gtk::Window) {
+fn show_about(parent: &impl IsA<Window>) {
     use gtk::{Dialog, Image, Label, Box as GtkBox, Orientation};
 
     // Get version from Cargo.toml
@@ -166,33 +175,20 @@ fn show_about(parent: &gtk::Window) {
     };
 
     // Create a dialog
-    let dialog = Dialog::with_buttons(
-        Some("About BackupToUSB"),
-        Some(parent),
-        gtk::DialogFlags::MODAL,
-        &[("OK", gtk::ResponseType::Ok)],
-    );
+    let dialog = Dialog::builder()
+        .title("About BackupToUSB")
+        .transient_for(parent)
+        .modal(true)
+        .build();
+
+    dialog.add_buttons(&[("OK", gtk::ResponseType::Ok)]);
 
     // Vertical box for image + text
     let vbox = GtkBox::new(Orientation::Vertical, 10);
-    vbox.set_margin_all(10);
+    vbox.set_margin_start(10);
+    vbox.set_margin_end(10);
+    vbox.set_margin_top(10);
+    vbox.set_margin_bottom(10);
 
     // Load logo image
-    let logo_path = "extra/logo/backuptousb.png";
-    let image = Image::from_file(logo_path);
-
-    // Text label with version + year
-    let text = Label::new(Some(&format!("BackupToUSB {} - {}", VERSION, year_text)));
-    text.set_justify(gtk::Justification::Center);
-
-    // Pack image and text into vbox
-    vbox.append(&image);
-    vbox.append(&text);
-
-    // Add vbox to dialog content
-    dialog.content_area().append(&vbox);
-
-    // Run dialog
-    dialog.run();
-    dialog.close();
-}
+    let
