@@ -73,12 +73,9 @@ fn main() {
                 Some("Choose Target Folder"),
                 Some(&window_clone_for_chooser),
                 FileChooserAction::SelectFolder,
+                &[("Cancel", gtk::ResponseType::Cancel), ("Open", gtk::ResponseType::Accept)],
             );
 
-            dialog.add_buttons(&[
-                ("Cancel", gtk::ResponseType::Cancel),
-                ("Open", gtk::ResponseType::Accept),
-            ]);
             dialog.set_modal(true);
 
             let target_path_inner = target_path_clone.clone();
