@@ -10,7 +10,7 @@ include!(concat!(env!("OUT_DIR"), "/compile_year.rs"));
 
 fn main() {
     let app = Application::builder()
-        .application_id("com.kuznix.backuptousb")
+        .application_id("com.Kuznix.BackupToUSB")
         .build();
 
     app.connect_activate(|app| {
@@ -149,9 +149,12 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> st
     Ok(())
 }
 
-/// Show about dialog with logo and dynamic year
+/// Show about dialog with logo, version, and dynamic year
 fn show_about(parent: &gtk::Window) {
     use gtk::{Dialog, Image, Label, Box as GtkBox, Orientation};
+
+    // Get version from Cargo.toml
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
 
     // Determine year display starting from 2026
     let year_text = if COMPILE_YEAR == 2026 {
@@ -178,8 +181,8 @@ fn show_about(parent: &gtk::Window) {
     let logo_path = "extra/logo/backuptousb.png";
     let image = Image::from_file(logo_path);
 
-    // Text label
-    let text = Label::new(Some(&format!("BackupToUSB - {}", year_text)));
+    // Text label with version + year
+    let text = Label::new(Some(&format!("BackupToUSB {} - {}", VERSION, year_text)));
     text.set_justify(gtk::Justification::Center);
 
     // Pack image and text into vbox
