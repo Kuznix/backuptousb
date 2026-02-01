@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::Write;
 use dirs;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 // Include compile-time year from build.rs
 include!(concat!(env!("OUT_DIR"), "/compile_year.rs"));
@@ -33,11 +35,13 @@ fn main() {
         vbox.set_margin_top(10);
         vbox.set_margin_bottom(10);
 
-        // Folder chooser using FileChooserNative
-        let folder_chooser = FileChooserNative::builder()
-            .title("Choose Target Folder")
-            .action(FileChooserAction::SelectFolder)
-            .build();
+        // Instead of packing a FileChooserNative (which is a dialog, not a widget),
+        // provide a button that opens a FileChooserNative and a label showing the chosen path.
+        let choose_button = Button::with_label("Choose Target Folder");
+        let path_label = Label::new(Some("No folder selected"));
+
+        // Shared state for the selected target path
+        let target_path: Rc<RefCell<Option<PathBuf>>> = Rc::new(RefCell::new(None));
 
         // Checkboxes
         let ssh_checkbox = CheckButton::with_label("Copy SSH keys (~/.ssh)");
@@ -49,7 +53,8 @@ fn main() {
         let about_button = Button::with_label("About");
 
         // Pack widgets
-        vbox.append(&folder_chooser);
+        vbox.append(&choose_button);
+        vbox.append(&path_label);
         vbox.append(&ssh_checkbox);
         vbox.append(&delete_checkbox);
         vbox.append(&log_checkbox);
@@ -58,14 +63,43 @@ fn main() {
 
         window.set_child(Some(&vbox));
 
+        // Choose button opens a FileChooserNative dialog
+        let target_path_clone = target_path.clone();
+        let path_label_clone = path_label.clone();
+        let window_clone_for_chooser = window.clone();
+        choose_button.connect_clicked(move |_| {
+            let dialog = FileChooserNative::builder()
+                .title("Choose Target Folder")
+                .action(FileChooserAction::SelectFolder)
+                .transient_for(&window_clone_for_chooser)
+                .modal(true)
+                .build();
+
+            let target_path_inner = target_path_clone.clone();
+            let path_label_inner = path_label_clone.clone();
+            dialog.connect_response(move |dialog, response| {
+                if response == gtk::ResponseType::Accept {
+                    if let Some(file) = dialog.file() {
+                        if let Some(path) = file.path() {
+                            *target_path_inner.borrow_mut() = Some(path.clone());
+                            path_label_inner.set_text(&path.to_string_lossy());
+                        }
+                    }
+                }
+                dialog.close();
+            });
+
+            dialog.present();
+        });
+
         // Backup button clicked
-        let folder_chooser_clone = folder_chooser.clone();
+        let target_path_clone2 = target_path.clone();
         let ssh_checkbox_clone = ssh_checkbox.clone();
         let delete_checkbox_clone = delete_checkbox.clone();
         let log_checkbox_clone = log_checkbox.clone();
 
         backup_button.connect_clicked(move |_| {
-            if let Some(target_path) = folder_chooser_clone.file().map(PathBuf::from) {
+            if let Some(target_path) = target_path_clone2.borrow().clone() {
                 let copy_ssh = ssh_checkbox_clone.is_active();
                 let delete_large = delete_checkbox_clone.is_active();
                 let log = log_checkbox_clone.is_active();
@@ -160,7 +194,7 @@ fn copy_home(target: &Path, copy_ssh: bool, delete_large: bool, log: bool) -> Re
 
 /// Show about dialog with logo, version, and dynamic year
 fn show_about(parent: &impl IsA<Window>) {
-    use gtk::{Dialog, Image, Label, Box as GtkBox, Orientation};
+    use gtk::{Dialog, Image, Box as GtkBox, Orientation};
 
     // Get version from Cargo.toml
     const VERSION: &str = env!("CARGO_PKG_VERSION");
